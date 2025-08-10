@@ -29,7 +29,7 @@ pub fn main() !void {
 
     const response_slice = try http_body.toOwnedSlice();
 
-    std.debug.print("{s}", .{response_slice});
+    try save_feed(url, response_slice, allocator);
 }
 
 // For some reason the compiler is not happy with the `uri_string` declaration in the head here.  I thought a `[]u8` would work for a string
@@ -42,6 +42,24 @@ fn fetch_rss(uri_string: []const u8, client: *std.http.Client, response_list: *s
     const response = try client.fetch(.{ .method = .GET, .location = .{ .uri = uri }, .response_storage = .{ .dynamic = response_list }, .headers = .{ .accept_encoding = .{ .override = "application/rss" } } });
 
     return response.status;
+}
+
+// Write feed response to file.
+fn save_feed(uri: []const u8, response: []u8, allocator: std.mem.Allocator) !void {
+    // This is a tad bit janky and should be more robust.  However, as long as the URL is well formed then the second item
+    // in the `uri_parts` iterator will be empty ("//").
+    var uri_parts = std.mem.splitScalar(u8, uri, '/');
+    _ = uri_parts.first();
+    _ = uri_parts.next();
+
+    const domain = uri_parts.next().?;
+    const file_name = try std.mem.concat(allocator, u8, &.{ domain, ".rss" });
+    defer allocator.free(file_name);
+
+    const file = try std.fs.cwd().createFile(file_name, .{});
+    defer file.close();
+
+    _ = try file.write(response);
 }
 
 const std = @import("std");
